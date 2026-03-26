@@ -144,7 +144,7 @@ export default function App() {
   const isLoading = status === 'queued' || status === 'generating'
 
   return (
-    <div className="app">
+    <main className="app">
       <div className="container">
 
         <header className="header">
@@ -153,8 +153,9 @@ export default function App() {
         </header>
 
         <div className="card">
-          <label className="field-label">PROMPT</label>
+          <label htmlFor="prompt" className="field-label">PROMPT</label>
           <textarea
+            id="prompt"
             className="textarea"
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
@@ -163,9 +164,10 @@ export default function App() {
           />
 
           <div className="duration-row">
-            <label className="field-label">DURATION</label>
+            <label htmlFor="duration" className="field-label">DURATION</label>
             <span className="duration-value">{duration}s</span>
             <input
+              id="duration"
               type="range"
               className="slider"
               min={5}
@@ -179,6 +181,7 @@ export default function App() {
           <button
             className="btn-advanced"
             onClick={() => setShowAdvanced(v => !v)}
+            aria-expanded={showAdvanced}
           >
             Advanced
             <svg
@@ -188,6 +191,7 @@ export default function App() {
               viewBox="0 0 12 12"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
             >
               <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -196,9 +200,10 @@ export default function App() {
           <div className={`advanced-panel${showAdvanced ? ' open' : ''}`}>
             <div className="advanced-inner">
               <div className="duration-row">
-                <label className="field-label">TEMPERATURE</label>
+                <label htmlFor="temperature" className="field-label">TEMPERATURE</label>
                 <span className="duration-value">{temperature.toFixed(1)}</span>
                 <input
+                  id="temperature"
                   type="range"
                   className="slider"
                   min={0.5}
@@ -209,9 +214,10 @@ export default function App() {
                 />
               </div>
               <div className="duration-row">
-                <label className="field-label">CFG COEF</label>
+                <label htmlFor="cfg-coef" className="field-label">CFG COEF</label>
                 <span className="duration-value">{cfgCoef.toFixed(1)}</span>
                 <input
+                  id="cfg-coef"
                   type="range"
                   className="slider"
                   min={1.0}
@@ -243,6 +249,7 @@ export default function App() {
               <button
                 className="btn-play"
                 onClick={() => wsRef.current?.playPause()}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? '⏸' : '▶'}
               </button>
@@ -264,8 +271,12 @@ export default function App() {
                 key={t.task_id}
                 className={`track-item${t.task_id === activeTrackId ? ' active' : ''}`}
                 onClick={() => loadTrack(t.file_url, t.prompt, t.task_id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') loadTrack(t.file_url, t.prompt, t.task_id) }}
+                aria-label={`Play: ${t.prompt}`}
               >
-                <span className="track-icon">{t.task_id === activeTrackId ? '▶' : '○'}</span>
+                <span className="track-icon" aria-hidden="true">{t.task_id === activeTrackId ? '▶' : '○'}</span>
                 <span className="track-prompt">{t.prompt}</span>
                 <span className="track-duration">{t.duration}s</span>
               </div>
@@ -274,6 +285,6 @@ export default function App() {
         )}
 
       </div>
-    </div>
+    </main>
   )
 }
