@@ -2,7 +2,7 @@
 set -e
 
 echo "=== Установка Python-зависимостей ==="
-pip install -r api/requirements_mock.txt --quiet
+pip3 install -r api/requirements_mock.txt --quiet
 
 echo "=== Сборка фронтенда ==="
 cd frontend
