@@ -1,6 +1,9 @@
 from audiocraft.models import MusicGen
+from audiocraft.modules.conditioners import ConditioningAttributes
 from peft import LoraConfig, get_peft_model
 import torch
+import torch.nn.functional as F
+from torch.cuda.amp import GradScaler
 import json
 from torch.utils.data import Dataset, DataLoader
 import torchaudio
@@ -13,8 +16,8 @@ METADATA_FILE = 'dataset/metadata.jsonl'
 OUTPUT_DIR = 'checkpoints'
 BATCH_SIZE = 1
 GRAD_ACCUM = 8
-LR = 1e-4
-EPOCHS = 10
+LR = 5e-5
+EPOCHS = 3
 # -------------------
 
 
@@ -49,6 +52,11 @@ def main():
         bias="none",
     )
     model.lm = get_peft_model(model.lm, lora_config)
+    # Приводим LoRA-адаптеры к fp32: GradScaler требует fp32-параметры,
+    # autocast сам кастит их в fp16 для forward-pass
+    for param in model.lm.parameters():
+        if param.requires_grad:
+            param.data = param.data.float()
 
     trainable = sum(p.numel() for p in model.lm.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.lm.parameters())
@@ -57,6 +65,7 @@ def main():
     optimizer = torch.optim.AdamW(
         [p for p in model.lm.parameters() if p.requires_grad], lr=LR
     )
+    scaler = GradScaler()
 
     dataset = AudioDataset()
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
@@ -68,18 +77,45 @@ def main():
         optimizer.zero_grad()
 
         for step, batch in enumerate(loader):
-            with torch.autocast(device):
-                codes = model.compression_model.encode(batch['wav'].to(device))[0]
-                conditions = [{'description': [c]} for c in batch['caption']]
+            wav = batch['wav'].to(device)
+            if wav.shape[1] > 1:
+                wav = wav.mean(dim=1, keepdim=True)  # стерео → моно
+            with torch.autocast(device_type=device):
+                codes = model.compression_model.encode(wav)[0]
+                conditions = [ConditioningAttributes(text={'description': c}) for c in batch['caption']]
                 out = model.lm.compute_predictions(codes=codes, conditions=conditions)
-                loss = out.loss / GRAD_ACCUM
 
-            loss.backward()
+            # Получаем delay-patterned последовательность как цели
+            T = codes.shape[-1]
+            pattern = model.lm.pattern_provider.get_pattern(T)
+            sequence_codes, _, _ = pattern.build_pattern_sequence(
+                codes, model.lm.special_token_id
+            )
+
+            logits = out.logits.float()  # [B, K, S_logits, card]
+            B, K, S_logits, card = logits.shape
+            S_seq = sequence_codes.shape[2]
+            S = min(S_logits, S_seq - 1)
+            pred = logits[:, :, :S].reshape(-1, card)
+            target = sequence_codes[:, :, 1:S + 1].reshape(-1).long()
+
+            # Хвостовые позиции delay-паттерна дают NaN логиты — маскируем их
+            nan_positions = pred.isnan().any(dim=-1)
+            target = target.masked_fill(nan_positions, model.lm.special_token_id)
+            pred = pred.nan_to_num(0.0)
+
+            loss = F.cross_entropy(
+                pred, target, ignore_index=model.lm.special_token_id
+            ) / GRAD_ACCUM
+
+            scaler.scale(loss).backward()
             total_loss += loss.item()
 
             if (step + 1) % GRAD_ACCUM == 0:
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.lm.parameters(), 1.0)
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
 
             if step % 50 == 0:

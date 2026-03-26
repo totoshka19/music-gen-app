@@ -1,0 +1,16 @@
+run = "bash run_replit.sh"
+entrypoint = "api/main.py"
+
+[env]
+MOCK = "true"
+PORT = "8000"
+
+[[ports]]
+localPort = 8000
+externalPort = 80
+
+[nix]
+channel = "stable-23_05"
+
+[deployment]
+run = ["bash", "run_replit.sh"]
