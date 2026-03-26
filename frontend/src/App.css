@@ -196,6 +196,14 @@ body {
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
 }
 
+.timer {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Loading spinner */
 
 .spinner {

@@ -32,10 +32,12 @@ export default function App() {
   const [currentPrompt, setCurrentPrompt] = useState('')
   const [isPlaying, setIsPlaying] = useState(false)
   const [activeTrackId, setActiveTrackId] = useState<string | null>(null)
+  const [elapsed, setElapsed] = useState(0)
 
   const waveRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WaveSurfer | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const downloadTrack = useCallback(async (url: string) => {
     const resp = await fetch(`http://localhost:8000${url}`)
@@ -84,11 +86,14 @@ export default function App() {
   useEffect(() => () => {
     wsRef.current?.destroy()
     if (pollRef.current) clearInterval(pollRef.current)
+    if (timerRef.current) clearInterval(timerRef.current)
   }, [])
 
   const generate = async () => {
     if (!prompt.trim() || ['queued', 'generating'].includes(status)) return
     setStatus('queued')
+    setElapsed(0)
+    timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000)
 
     try {
       const { data } = await axios.post(`${API}/generate`, { prompt, duration })
@@ -101,6 +106,7 @@ export default function App() {
 
           if (s.status === 'done') {
             clearInterval(pollRef.current!)
+            clearInterval(timerRef.current!)
             const { data: r } = await axios.get(`${API}/result/${taskId}`)
             const track: Track = {
               task_id: taskId,
@@ -117,14 +123,17 @@ export default function App() {
 
           if (s.status === 'failed') {
             clearInterval(pollRef.current!)
+            clearInterval(timerRef.current!)
             setStatus('error')
           }
         } catch {
           clearInterval(pollRef.current!)
+          clearInterval(timerRef.current!)
           setStatus('error')
         }
       }, 5000)
     } catch {
+      clearInterval(timerRef.current!)
       setStatus('error')
     }
   }
@@ -172,6 +181,7 @@ export default function App() {
           >
             {isLoading && <span className="spinner" />}
             {STATUS_LABELS[status]}
+            {isLoading && <span className="timer">{elapsed}s</span>}
           </button>
         </div>
 
