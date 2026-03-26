@@ -9,3 +9,32 @@ __pycache__/
 *.wav
 node_modules/
 dist/
+
+# IDE — IntelliJ/PyCharm/WebStorm
+.idea/
+
+# Claude Code
+.claude/
+
+# PyTorch/HuggingFace модели
+*.pt
+*.pth
+*.safetensors
+
+# Другие аудиоформаты
+*.mp3
+*.ogg
+*.flac
+
+# Windows артефакты
+Thumbs.db
+desktop.ini
+
+# Логи
+*.log
+
+# Pytest кэш
+.pytest_cache/
+
+# Vite env файлы (локальные переопределения)
+*.local
