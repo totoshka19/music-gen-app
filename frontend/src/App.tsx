@@ -37,6 +37,16 @@ export default function App() {
   const wsRef = useRef<WaveSurfer | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const downloadTrack = useCallback(async (url: string) => {
+    const resp = await fetch(`http://localhost:8000${url}`)
+    const blob = await resp.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = url.split('/').pop() ?? 'track.wav'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }, [])
+
   const loadTrack = useCallback((url: string, trackPrompt: string, trackId: string) => {
     if (!waveRef.current) return
     wsRef.current?.destroy()
@@ -170,13 +180,12 @@ export default function App() {
               >
                 {isPlaying ? '⏸' : '▶'}
               </button>
-              <a
-                href={`http://localhost:8000${currentUrl}`}
-                download
+              <button
                 className="btn-download"
+                onClick={() => downloadTrack(currentUrl)}
               >
                 Download .wav
-              </a>
+              </button>
             </div>
           </div>
         )}
