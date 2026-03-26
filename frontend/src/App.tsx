@@ -75,6 +75,12 @@ export default function App() {
     if (currentUrl) loadTrack(currentUrl, currentPrompt, activeTrackId ?? '')
   }, [currentUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    axios.get(`${API}/tracks`).then(({ data }) => {
+      if (data.tracks?.length) setTracks(data.tracks)
+    }).catch(() => {})
+  }, [])
+
   useEffect(() => () => {
     wsRef.current?.destroy()
     if (pollRef.current) clearInterval(pollRef.current)
