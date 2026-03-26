@@ -33,6 +33,9 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [activeTrackId, setActiveTrackId] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [temperature, setTemperature] = useState(0.9)
+  const [cfgCoef, setCfgCoef] = useState(3.0)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const waveRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WaveSurfer | null>(null)
@@ -96,7 +99,7 @@ export default function App() {
     timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000)
 
     try {
-      const { data } = await axios.post(`${API}/generate`, { prompt, duration })
+      const { data } = await axios.post(`${API}/generate`, { prompt, duration, temperature, cfg_coef: cfgCoef })
       const taskId: string = data.task_id
 
       pollRef.current = setInterval(async () => {
@@ -172,6 +175,54 @@ export default function App() {
               value={duration}
               onChange={e => setDuration(+e.target.value)}
             />
+          </div>
+
+          <button
+            className="btn-advanced"
+            onClick={() => setShowAdvanced(v => !v)}
+          >
+            Advanced
+            <svg
+              className={`chevron-icon${showAdvanced ? ' open' : ''}`}
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          <div className={`advanced-panel${showAdvanced ? ' open' : ''}`}>
+            <div className="advanced-inner">
+              <div className="duration-row">
+                <label className="field-label">TEMPERATURE</label>
+                <span className="duration-value">{temperature.toFixed(1)}</span>
+                <input
+                  type="range"
+                  className="slider"
+                  min={0.5}
+                  max={1.5}
+                  step={0.1}
+                  value={temperature}
+                  onChange={e => setTemperature(+e.target.value)}
+                />
+              </div>
+              <div className="duration-row">
+                <label className="field-label">CFG COEF</label>
+                <span className="duration-value">{cfgCoef.toFixed(1)}</span>
+                <input
+                  type="range"
+                  className="slider"
+                  min={1.0}
+                  max={6.0}
+                  step={0.5}
+                  value={cfgCoef}
+                  onChange={e => setCfgCoef(+e.target.value)}
+                />
+              </div>
+            </div>
           </div>
 
           <button
