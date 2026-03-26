@@ -1,0 +1,11 @@
+venv/
+checkpoints/
+dataset/
+api/outputs/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.wav
+node_modules/
+dist/
