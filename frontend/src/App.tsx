@@ -148,9 +148,8 @@ export default function App() {
       <div className="container">
 
         <header className="header">
-          <div className="header-badge">LOCAL AI</div>
           <h1 className="title">Music Generator</h1>
-          <p className="subtitle">MusicGen Medium · LoRA fine-tuned · RTX 4070</p>
+          <p className="subtitle">Powered by MusicGen Medium</p>
         </header>
 
         <div className="card">
