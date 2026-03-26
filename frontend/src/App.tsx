@@ -1,144 +1,32 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import WaveSurfer from 'wavesurfer.js'
+import { useState, useCallback } from 'react'
 import './App.css'
-
-const API = 'http://localhost:8000/api/v1'
-
-type Status = 'idle' | 'queued' | 'generating' | 'done' | 'error'
-
-interface Track {
-  task_id: string
-  prompt: string
-  file_url: string
-  duration: number
-  created_at: string
-}
-
-const STATUS_LABELS: Record<Status, string> = {
-  idle: 'Generate',
-  queued: 'In queue...',
-  generating: 'Generating...',
-  done: 'Generate again',
-  error: 'Error — retry',
-}
+import { STATUS_LABELS } from './constants'
+import { useWaveSurfer } from './hooks/useWaveSurfer'
+import { useGeneration } from './hooks/useGeneration'
+import { useTrackHistory } from './hooks/useTrackHistory'
+import { downloadTrack } from './utils/downloadTrack'
+import type { Track } from './types'
 
 export default function App() {
   const [prompt, setPrompt] = useState('')
   const [duration, setDuration] = useState(20)
-  const [status, setStatus] = useState<Status>('idle')
-  const [tracks, setTracks] = useState<Track[]>([])
-  const [currentUrl, setCurrentUrl] = useState('')
-  const [currentPrompt, setCurrentPrompt] = useState('')
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [activeTrackId, setActiveTrackId] = useState<string | null>(null)
-  const [elapsed, setElapsed] = useState(0)
   const [temperature, setTemperature] = useState(0.9)
   const [cfgCoef, setCfgCoef] = useState(3.0)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
-  const waveRef = useRef<HTMLDivElement>(null)
-  const wsRef = useRef<WaveSurfer | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const { waveRef, isPlaying, currentUrl, currentPrompt, activeTrackId, loadTrack, playPause } = useWaveSurfer()
+  const { tracks, addTrack } = useTrackHistory()
 
-  const downloadTrack = useCallback(async (url: string) => {
-    const resp = await fetch(`http://localhost:8000${url}`)
-    const blob = await resp.blob()
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = url.split('/').pop() ?? 'track.wav'
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }, [])
+  const onSuccess = useCallback((track: Track) => {
+    loadTrack(track.file_url, track.prompt, track.task_id)
+    addTrack(track)
+  }, [loadTrack, addTrack])
 
-  const loadTrack = useCallback((url: string, trackPrompt: string, trackId: string) => {
-    if (!waveRef.current) return
-    wsRef.current?.destroy()
-    setIsPlaying(false)
-    setActiveTrackId(trackId)
-    setCurrentPrompt(trackPrompt)
+  const { status, elapsed, generate } = useGeneration(onSuccess)
 
-    const ws = WaveSurfer.create({
-      container: waveRef.current,
-      waveColor: '#6366f1',
-      progressColor: '#22d3ee',
-      height: 72,
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 3,
-      cursorColor: 'transparent',
-    })
-    ws.on('play', () => setIsPlaying(true))
-    ws.on('pause', () => setIsPlaying(false))
-    ws.on('finish', () => setIsPlaying(false))
-    ws.load(`http://localhost:8000${url}`)
-    wsRef.current = ws
-  }, [])
-
-  useEffect(() => {
-    if (currentUrl) loadTrack(currentUrl, currentPrompt, activeTrackId ?? '')
-  }, [currentUrl]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    axios.get(`${API}/tracks`).then(({ data }) => {
-      if (data.tracks?.length) setTracks(data.tracks)
-    }).catch(() => {})
-  }, [])
-
-  useEffect(() => () => {
-    wsRef.current?.destroy()
-    if (pollRef.current) clearInterval(pollRef.current)
-    if (timerRef.current) clearInterval(timerRef.current)
-  }, [])
-
-  const generate = async () => {
-    if (!prompt.trim() || ['queued', 'generating'].includes(status)) return
-    setStatus('queued')
-    setElapsed(0)
-    timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000)
-
-    try {
-      const { data } = await axios.post(`${API}/generate`, { prompt, duration, temperature, cfg_coef: cfgCoef })
-      const taskId: string = data.task_id
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const { data: s } = await axios.get(`${API}/status/${taskId}`)
-          setStatus(s.status)
-
-          if (s.status === 'done') {
-            clearInterval(pollRef.current!)
-            clearInterval(timerRef.current!)
-            const { data: r } = await axios.get(`${API}/result/${taskId}`)
-            const track: Track = {
-              task_id: taskId,
-              prompt,
-              file_url: r.file_url,
-              duration: r.duration,
-              created_at: r.created_at,
-            }
-            setCurrentUrl(r.file_url)
-            setCurrentPrompt(prompt)
-            setActiveTrackId(taskId)
-            setTracks(prev => [track, ...prev])
-          }
-
-          if (s.status === 'failed') {
-            clearInterval(pollRef.current!)
-            clearInterval(timerRef.current!)
-            setStatus('error')
-          }
-        } catch {
-          clearInterval(pollRef.current!)
-          clearInterval(timerRef.current!)
-          setStatus('error')
-        }
-      }, 5000)
-    } catch {
-      clearInterval(timerRef.current!)
-      setStatus('error')
-    }
+  const handleGenerate = () => {
+    if (status === 'queued' || status === 'generating') return
+    generate({ prompt, duration, temperature, cfgCoef })
   }
 
   const isLoading = status === 'queued' || status === 'generating'
@@ -160,7 +48,7 @@ export default function App() {
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
             placeholder="Describe the music in English: lofi hip hop, relaxed piano, 85 bpm, vinyl crackle..."
-            onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) generate() }}
+            onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleGenerate() }}
           />
 
           <div className="duration-row">
@@ -232,7 +120,7 @@ export default function App() {
 
           <button
             className={`btn-primary${isLoading ? ' loading' : ''}${status === 'error' ? ' error' : ''}`}
-            onClick={generate}
+            onClick={handleGenerate}
             disabled={isLoading}
           >
             {isLoading && <span className="spinner" />}
@@ -248,7 +136,7 @@ export default function App() {
             <div className="player-controls">
               <button
                 className="btn-play"
-                onClick={() => wsRef.current?.playPause()}
+                onClick={playPause}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? '⏸' : '▶'}
